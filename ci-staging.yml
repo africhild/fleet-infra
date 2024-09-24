@@ -1,0 +1,90 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Extract branch name
+      id: extract_branch
+      run: |
+        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        if [ "${BRANCH_NAME}" == "main" ]; then
+        BRANCH_NAME=staging
+        fi
+        echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+
+
+    - name: Extract repository name
+      id: extract_repo
+      run: |
+        REPO_NAME=${GITHUB_REPOSITORY#*/}
+        echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
+    # - name: Prepare
+    #   id: prep
+    #   run: |
+    #     VERSION=${GITHUB_SHA::8}
+    #     echo BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') >> $GITHUB_OUTPUT
+    #     echo VERSION=${VERSION} >> $GITHUB_OUTPUT
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      run: |
+        IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME }}:${{ env.BRANCH_NAME }}-${{ github.sha }}"
+        IMAGE_NAME_LOWER=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')
+        docker build . -t $IMAGE_NAME_LOWER
+        docker push $IMAGE_NAME_LOWER
+
+    - name: Checkout fleet-infra with manifests
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ env.GITHUB_REPOSITORY }}/fleet-infra
+        path: manifests
+        token: ${{ secrets.WORKFLOW_TOKEN }}
+
+    - name: Debug deployment.yaml before update
+      run: |
+        cat manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+    - name: Update deployment images
+      run: |
+        IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME }}:${{ env.BRANCH_NAME }}-${{ github.sha }}"
+        IMAGE_NAME_LOWER=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')
+        export IMAGE_NAME_LOWER=$IMAGE_NAME_LOWER
+        
+        # # Update configmap.yaml
+        # yq e '.data.GIT_SHA = "${{ env.BRANCH_NAME }}-${{ github.sha }}"' -i manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/configmap.yaml
+        
+        # # Debugging to ensure we have the right path
+        # yq e '.spec' manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+        # yq e '.spec.template' manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+        # yq e '.spec.template.spec' manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+        # yq e '.spec.template.spec.containers' manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+
+        # Update deployment.yaml
+        yq e '.spec.template.spec.containers[0].image = env(IMAGE_NAME_LOWER)' -i manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+
+        cd manifests
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+        # git add apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/configmap.yaml
+        git add apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml
+        git commit -m "Update image to $IMAGE_NAME_LOWER"
+        git push
+
+    # - name: Debug deployment.yaml after update
+    #   run: |
+    #     cat manifests/apps/${{ env.BRANCH_NAME }}/${{ env.REPO_NAME }}/deployment.yaml

@@ -1,0 +1,45 @@
+
+ # with a yaml format for  owner, cluster, namespace, cluster_to_environment (single, separate),  repository, branch, path, read-write-key, components-extra in that order
+# cluster should be an array
+apiVersion: v1
+owner: "REPO_OWNER"
+kind: "GitRepository" # GitRepository / OCIRepository / Bucket
+provider: "github" # github / gitlab / bitbucket / gcr / ecr / s3
+team: "devops" #comma separated list of teams
+defaultCluster: "<cluster_name>"
+defaultNamespace: "staging"
+scriptPath: "./setup.sh"
+clusters:
+  - name: "<cluster_name>"
+    namespaces:
+      - namespace:  "staging"
+        repository: "fleet-infra"
+        host: "staging.example.com"
+        branch: "main"
+        config:
+          readWriteKey: true
+          componentsExtra:
+            - "image-reflector-controller"
+            - "image-automation-controller"
+      # - namespace:  "production" # this is a separate namespace but in the same cluster
+      #   repository: "fleet-infra"
+      #   host: "staging.example.com"
+      #   branch: "production"
+      #   config:
+      #     readWriteKey: true
+      #     componentsExtra:
+      #       - "image-reflector-controller"
+      #       - "image-automation-controller"
+  # - name: "k8s-production" # this is a separate cluster
+  #   namespaces:
+  #     - namespace:  "production"
+  #       repository: "fleet-infra"
+  #       host: "staging.example.com"
+  #       branch: "production"
+  #       config:
+  #         readWriteKey: true
+  #         componentsExtra:
+  #           - "image-reflector-controller"
+  #           - "image-automation-controller"
+
+

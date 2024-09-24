@@ -1,0 +1,14 @@
+# Exclude all
+# /*
+*.sh
+*.env
+*.idea
+*.envrc
+*.md
+.DS_Store
+*.pem
+dump.go
+*.log
+*.log.*
+main
+# Include manifest directories
